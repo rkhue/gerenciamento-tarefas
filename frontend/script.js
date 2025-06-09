@@ -7,17 +7,26 @@ window.onload = () => {
 };
 
 function addTask() {
-  const title = document.getElementById('title').value;
-  const description = document.getElementById('description').value;
+  const title = document.getElementById('title').value.trim();
+  const description = document.getElementById('description').value.trim();
+  
+  if (!title) {
+    alert('Por favor, insira um título para a tarefa');
+    return;
+  }
 
   const task = { title, description, completed: false };
   localStorage.setItem(title, JSON.stringify(task));
+
+  // Clear inputs
+  document.getElementById('title').value = '';
+  document.getElementById('description').value = '';
 
   fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(task)
-  }).then(loadTasks);
+  }).then(loadTasks).catch(() => renderTasks());
 }
 
 function loadTasks() {
@@ -26,7 +35,8 @@ function loadTasks() {
     .then(tasks => {
       tasks.forEach(task => localStorage.setItem(task.title, JSON.stringify(task)));
       renderTasks();
-    });
+    })
+    .catch(() => renderTasks());
 }
 
 function renderTasks() {
@@ -34,29 +44,66 @@ function renderTasks() {
   const taskList = document.getElementById('taskList');
   taskList.innerHTML = '';
 
+  const tasks = [];
   Object.keys(localStorage).forEach(key => {
-    const task = JSON.parse(localStorage.getItem(key));
-    if (filter === 'completed' && !task.completed) return;
-    if (filter === 'pending' && task.completed) return;
+    try {
+      const task = JSON.parse(localStorage.getItem(key));
+      if (task && typeof task === 'object' && task.title) {
+        tasks.push(task);
+      }
+    } catch (e) {
+      // Skip invalid JSON
+    }
+  });
 
+  const filteredTasks = tasks.filter(task => {
+    if (filter === 'completed' && !task.completed) return false;
+    if (filter === 'pending' && task.completed) return false;
+    return true;
+  });
+
+  if (filteredTasks.length === 0) {
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.innerHTML = `
+      <div class="empty-icon">📝</div>
+      <div class="empty-text">Nenhuma tarefa encontrada</div>
+      <div class="empty-subtext">Adicione uma nova tarefa para começar</div>
+    `;
+    taskList.appendChild(emptyState);
+    return;
+  }
+
+  filteredTasks.forEach(task => {
     const li = document.createElement('li');
-    li.textContent = `${task.title}: ${task.description} - ${task.completed ? "✅" : "❌"}`;
+    li.className = 'task-item';
 
-    const toggleBtn = document.createElement('button');
-    toggleBtn.textContent = task.completed ? 'Desmarcar' : 'Concluir';
-    toggleBtn.onclick = () => toggleComplete(task);
+    li.innerHTML = `
+      <div class="task-content">
+        <span class="task-status">${task.completed ? "✅" : "⏳"}</span>
+        <div class="task-text">
+          <span class="task-title">${task.title}</span>
+          ${task.description ? `<span class="task-description">- ${task.description}</span>` : ''}
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="task-btn toggle-btn" onclick="toggleComplete('${task.title.replace(/'/g, "\\'")}')">
+          ${task.completed ? 'Desmarcar' : 'Concluir'}
+        </button>
+        <button class="task-btn delete-btn" onclick="deleteTask('${task.title.replace(/'/g, "\\'")}')">
+          Excluir
+        </button>
+      </div>
+    `;
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = 'Excluir';
-    deleteBtn.onclick = () => deleteTask(task);
-
-    li.appendChild(toggleBtn);
-    li.appendChild(deleteBtn);
     taskList.appendChild(li);
   });
 }
 
-function toggleComplete(task) {
+function toggleComplete(taskTitle) {
+  const task = JSON.parse(localStorage.getItem(taskTitle));
+  if (!task) return;
+  
   task.completed = !task.completed;
   localStorage.setItem(task.title, JSON.stringify(task));
 
@@ -64,15 +111,22 @@ function toggleComplete(task) {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(task)
-  }).then(loadTasks);
+  }).then(loadTasks).catch(() => renderTasks());
 }
 
-function deleteTask(task) {
-  localStorage.removeItem(task.title);
+function deleteTask(taskTitle) {
+  if (!confirm('Tem certeza que deseja excluir esta tarefa?')) return;
+  
+  const task = JSON.parse(localStorage.getItem(taskTitle));
+  localStorage.removeItem(taskTitle);
 
-  fetch(`${API_URL}/${task._id}`, {
-    method: 'DELETE'
-  }).then(loadTasks);
+  if (task && task._id) {
+    fetch(`${API_URL}/${task._id}`, {
+      method: 'DELETE'
+    }).then(loadTasks).catch(() => renderTasks());
+  } else {
+    renderTasks();
+  }
 }
 
 function applyFilter() {
