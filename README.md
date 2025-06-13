@@ -1,4 +1,4 @@
-# Gerenciador de Tarefas
+# Gerenciador de Tarefas ✅
 
 Uma aplicação web simples para gerenciar tarefas (to-do list), composta por um backend Node.js/Express com MongoDB e um frontend em HTML, CSS e JavaScript.
 
